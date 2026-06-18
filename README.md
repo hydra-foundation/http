@@ -24,7 +24,7 @@ Routes are declared with `#[Route]` attributes on controller methods:
 #[Route('/users/{id}', methods: ['GET'])]
 public function show(int $id): ResponseInterface
 
-#[Route('/admin', middleware: [RequireAuth::class])]
+#[Route('/admin', middleware: [AuthenticateMiddleware::class])]
 public function index(): ResponseInterface
 ```
 
@@ -58,11 +58,11 @@ A class-level `#[RouteGroup]` shares a path prefix and/or middleware across all
 of a controller's routes:
 
 ```php
-#[RouteGroup('/admin', middleware: [RequireAuth::class])]
+#[RouteGroup('/admin', middleware: [AuthenticateMiddleware::class])]
 final class AdminController
 {
-    #[Route('/')]       // → /admin,        middleware: [RequireAuth]
-    #[Route('/users')]  // → /admin/users,  middleware: [RequireAuth]
+    #[Route('/')]       // → /admin,        middleware: [AuthenticateMiddleware]
+    #[Route('/users')]  // → /admin/users,  middleware: [AuthenticateMiddleware]
 }
 ```
 
