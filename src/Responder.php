@@ -43,24 +43,18 @@ final class Responder
 
     public function noContent(int|Status $status = Status::NoContent): ResponseInterface
     {
-        return $this->responses->createResponse($this->code($status));
+        return $this->responses->createResponse(Status::toInt($status));
     }
 
     public function redirect(string $location, int|Status $status = Status::Found): ResponseInterface
     {
-        return $this->responses->createResponse($this->code($status))->withHeader('Location', $location);
+        return $this->responses->createResponse(Status::toInt($status))->withHeader('Location', $location);
     }
 
     private function make(string $body, int|Status $status, string $contentType): ResponseInterface
     {
-        return $this->responses->createResponse($this->code($status))
+        return $this->responses->createResponse(Status::toInt($status))
             ->withHeader('Content-Type', $contentType)
             ->withBody($this->streams->createStream($body));
-    }
-
-    /** Normalize an int|Status to the int the PSR-7 factory expects. */
-    private function code(int|Status $status): int
-    {
-        return $status instanceof Status ? $status->value : $status;
     }
 }

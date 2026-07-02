@@ -7,6 +7,7 @@ namespace Hydra\Http\Tests\Unit;
 use ArrayObject;
 use Hydra\Core\Contracts\ContainerInterface;
 use Hydra\Http\Attributes\Route as RouteAttribute;
+use Hydra\Http\Attributes\RouteGroup as RouteGroupAttribute;
 use Hydra\Http\Router;
 use Hydra\Http\RouteScanner;
 use PHPUnit\Framework\TestCase;
@@ -104,6 +105,34 @@ final class AdminController
     #[RouteAttribute('/open')]
     public function open(ServerRequestInterface $request): ResponseInterface
     {
+        return $this->response;
+    }
+}
+
+/** Marker class-strings for the grouped-dispatch test; the container maps them to recording middleware. */
+final class GroupTagMiddleware {}
+final class MethodTagMiddleware {}
+
+/**
+ * A grouped controller: the class-level #[RouteGroup] carries the OUTER
+ * middleware, the method's #[Route] the INNER one. Used to prove the scanner's
+ * group→method fold doesn't just serialize correctly (RouteScannerTest already
+ * pins that) but actually EXECUTES outermost-first once dispatched through
+ * Router::handle() — the ordering AdminController relies on for its auth/authz
+ * gates.
+ */
+#[RouteGroupAttribute('/admin', middleware: [GroupTagMiddleware::class])]
+final class GroupedTaggingController
+{
+    public function __construct(
+        private readonly ArrayObject $log,
+        private readonly ResponseInterface $response,
+    ) {}
+
+    #[RouteAttribute('/panel', middleware: [MethodTagMiddleware::class])]
+    public function panel(): ResponseInterface
+    {
+        $this->log[] = 'controller';
         return $this->response;
     }
 }
@@ -435,5 +464,36 @@ final class PerRouteMiddlewareTest extends TestCase
 
         $this->assertSame($controllerResponse, $response);
         $this->assertContains('enter:loaded', $log->getArrayCopy(), 'middleware passed through loadRoutes must run');
+    }
+
+    // ------------------------------------------------------------------
+    // 6d. Group middleware executes OUTERMOST of the method's own, end-to-end
+    // ------------------------------------------------------------------
+
+    public function testGroupMiddlewareRunsOutermostThroughFullDispatch(): void
+    {
+        $log = new ArrayObject;
+        $controllerResponse = $this->response();
+        $controller = new GroupedTaggingController($log, $controllerResponse);
+
+        $container = $this->container([
+            GroupedTaggingController::class => $controller,
+            GroupTagMiddleware::class => new TaggingMiddleware('group', $log),
+            MethodTagMiddleware::class => new TaggingMiddleware('method', $log),
+        ]);
+
+        $router = new Router($container);
+        $router->loadRoutes((new RouteScanner)->scan([GroupedTaggingController::class]));
+
+        $response = $router->handle($this->request('GET', '/admin/panel'));
+
+        $this->assertSame($controllerResponse, $response);
+        // Group middleware wraps the method's: enter group → enter method →
+        // controller → exit method → exit group. This is the ordering the
+        // AdminController's #[RouteGroup] auth/authz gates depend on.
+        $this->assertSame(
+            ['enter:group', 'enter:method', 'controller', 'exit:method', 'exit:group'],
+            $log->getArrayCopy(),
+        );
     }
 }

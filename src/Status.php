@@ -62,4 +62,15 @@ enum Status: int
     {
         return self::tryFrom($code)?->reason();
     }
+
+    /**
+     * Normalize an `int|Status` to the plain int the PSR-7 layer speaks. The
+     * single home for the `instanceof` unwrap that every `int|Status`-accepting
+     * boundary (the {@see Responder}, the base controller's abort) would
+     * otherwise repeat.
+     */
+    public static function toInt(int|self $status): int
+    {
+        return $status instanceof self ? $status->value : $status;
+    }
 }
