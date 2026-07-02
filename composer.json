@@ -1,5 +1,5 @@
 {
-    "name": "hydra/http",
+    "name": "hydrakit/http",
     "description": "HTTP library for Hydra PHP framework",
     "type": "library",
     "license": "MIT",
@@ -24,7 +24,7 @@
     ],
     "require": {
         "php": ">=8.2",
-        "hydra/core": "*",
+        "hydrakit/core": "*",
         "psr/http-message": "^2.0",
         "psr/http-server-handler": "^1.0",
         "psr/http-server-middleware": "^1.0",
