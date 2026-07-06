@@ -21,16 +21,22 @@ use Psr\Http\Server\RequestHandlerInterface;
  *   - a secure request proceeds, and its response carries an HSTS header so the
  *     browser upgrades subsequent requests itself, without the round trip.
  *
- * "Secure" honours X-Forwarded-Proto: in our dev/prod stacks TLS terminates at
- * a proxy (Traefik), which forwards plain http here with the original scheme in
- * that header — trusting it is what makes the check work behind the proxy.
+ * "Secure" honours X-Forwarded-Proto only when the app opts in via
+ * $trustForwardedProto. Behind a TLS-terminating proxy (Traefik in our
+ * dev/prod stacks) the request arrives here as plain http with the original
+ * scheme in that header, so trusting it is what makes the check work — but
+ * the header is client-supplied like any other: an attacker hitting the app
+ * directly can send "X-Forwarded-Proto: https" and skip the redirect (and
+ * collect an HSTS header over plain http). Trust must therefore be the app's
+ * explicit declaration that a proxy it controls sets the header, never an
+ * implicit default.
  *
  * It sits near the OUTERMOST of the stack (just inside the header/logging
  * decorators, outside the error handler): the upgrade should happen before the
  * app does any real work, and it must see the request before the router.
  *
- * The enabled flag is a plain bool rather than an app config object so the
- * middleware stays app-agnostic; the app binds it with its own config value.
+ * The flags are plain bools rather than an app config object so the
+ * middleware stays app-agnostic; the app binds them with its own config values.
  */
 final class ForceHttpsMiddleware implements MiddlewareInterface
 {
@@ -40,6 +46,7 @@ final class ForceHttpsMiddleware implements MiddlewareInterface
     public function __construct(
         private readonly bool $enabled,
         private readonly Responder $respond,
+        private readonly bool $trustForwardedProto = false,
     ) {}
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -66,7 +73,11 @@ final class ForceHttpsMiddleware implements MiddlewareInterface
             return true;
         }
 
-        // TLS terminated at a proxy that forwarded the original scheme.
-        return strtolower($request->getHeaderLine('X-Forwarded-Proto')) === 'https';
+        // The forwarded scheme is only meaningful when the app has declared
+        // that a proxy it controls sets it (TLS terminated upstream). With no
+        // proxy, the header is attacker-controlled — consulting it here would
+        // let any direct client spoof its way past the redirect.
+        return $this->trustForwardedProto
+            && strtolower($request->getHeaderLine('X-Forwarded-Proto')) === 'https';
     }
 }

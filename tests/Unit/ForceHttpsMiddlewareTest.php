@@ -58,22 +58,37 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $this->assertStringContainsString('max-age=', $response->getHeaderLine('Strict-Transport-Security'));
     }
 
-    public function test_trusts_x_forwarded_proto_for_proxy_terminated_tls(): void
+    public function test_trusts_x_forwarded_proto_only_when_the_app_opts_in(): void
     {
         $handler = $this->handler();
         $request = $this->request('http://hydra.test/login')->withHeader('X-Forwarded-Proto', 'https');
 
-        $response = $this->middleware(enabled: true)->process($request, $handler);
+        $response = $this->middleware(enabled: true, trustForwardedProto: true)
+            ->process($request, $handler);
 
         $this->assertSame(1, $handler->calls, 'forwarded https should count as secure');
         $this->assertStringContainsString('max-age=', $response->getHeaderLine('Strict-Transport-Security'));
     }
 
-    private function middleware(bool $enabled): ForceHttpsMiddleware
+    public function test_ignores_spoofed_x_forwarded_proto_when_trust_is_off(): void
+    {
+        $handler = $this->handler();
+        // A client hitting the app directly can send any header it likes; with
+        // no declared proxy this must still be treated as an insecure request.
+        $request = $this->request('http://hydra.test/login')->withHeader('X-Forwarded-Proto', 'https');
+
+        $response = $this->middleware(enabled: true)->process($request, $handler);
+
+        $this->assertSame(0, $handler->calls, 'spoofed header must not bypass the redirect');
+        $this->assertSame(301, $response->getStatusCode());
+        $this->assertSame('https://hydra.test/login', $response->getHeaderLine('Location'));
+    }
+
+    private function middleware(bool $enabled, bool $trustForwardedProto = false): ForceHttpsMiddleware
     {
         $factory = new Psr17Factory;
 
-        return new ForceHttpsMiddleware($enabled, new Responder($factory, $factory));
+        return new ForceHttpsMiddleware($enabled, new Responder($factory, $factory), $trustForwardedProto);
     }
 
     private function request(string $uri): ServerRequestInterface
