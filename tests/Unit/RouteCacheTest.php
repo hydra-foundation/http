@@ -9,6 +9,12 @@ use PHPUnit\Framework\TestCase;
 
 final class RouteCacheTest extends TestCase
 {
+    /** The controllers list the sample routes were "scanned" from. */
+    private const CONTROLLERS = [
+        'App\\Controllers\\BlogController',
+        'App\\Controllers\\AdminController',
+    ];
+
     private string $dir;
 
     protected function setUp(): void
@@ -34,6 +40,11 @@ final class RouteCacheTest extends TestCase
         rmdir($this->dir);
     }
 
+    private function cache(string $path, array $controllers = self::CONTROLLERS): RouteCache
+    {
+        return new RouteCache($path, $controllers);
+    }
+
     /** A representative scan result: plain arrays, class-strings, empty and populated middleware. */
     private function sampleRoutes(): array
     {
@@ -55,14 +66,12 @@ final class RouteCacheTest extends TestCase
 
     public function testLoadReturnsNullWhenNoCacheFileExists(): void
     {
-        $cache = new RouteCache($this->dir . '/routes.php');
-
-        $this->assertNull($cache->load());
+        $this->assertNull($this->cache($this->dir . '/routes.php')->load());
     }
 
     public function testStoreThenLoadRoundTripsTheRoutesExactly(): void
     {
-        $cache = new RouteCache($this->dir . '/routes.php');
+        $cache = $this->cache($this->dir . '/routes.php');
         $routes = $this->sampleRoutes();
 
         $cache->store($routes);
@@ -75,7 +84,7 @@ final class RouteCacheTest extends TestCase
     public function testStoreCreatesMissingParentDirectories(): void
     {
         $path = $this->dir . '/bootstrap/cache/routes.php';
-        $cache = new RouteCache($path);
+        $cache = $this->cache($path);
 
         $cache->store($this->sampleRoutes());
 
@@ -83,20 +92,60 @@ final class RouteCacheTest extends TestCase
         $this->assertSame($this->sampleRoutes(), $cache->load());
     }
 
-    public function testStoredFileIsPlainPhpThatReturnsTheRoutes(): void
+    public function testStoredFileIsPlainPhpReturningFingerprintAndRoutes(): void
     {
         $path = $this->dir . '/routes.php';
-        (new RouteCache($path))->store($this->sampleRoutes());
+        $this->cache($path)->store($this->sampleRoutes());
 
-        // The artifact is a require-able PHP file (opcache-friendly), not a blob.
+        // The artifact is a require-able PHP file (opcache-friendly), not a
+        // blob: a wrapper array of the controllers fingerprint plus the routes.
         $this->assertStringStartsWith('<?php', file_get_contents($path));
-        $this->assertSame($this->sampleRoutes(), require $path);
+
+        $artifact = require $path;
+        $this->assertSame(['controllers', 'routes'], array_keys($artifact));
+        $this->assertSame($this->sampleRoutes(), $artifact['routes']);
+    }
+
+    public function testLoadReturnsNullWhenControllersListChanged(): void
+    {
+        $path = $this->dir . '/routes.php';
+        $this->cache($path)->store($this->sampleRoutes());
+
+        // A controller was added since route:cache ran — the artifact is stale
+        // and must read as a miss so the caller re-scans, not as routes that
+        // silently lack the new controller.
+        $grown = [...self::CONTROLLERS, 'App\\Controllers\\NewController'];
+        $this->assertNull($this->cache($path, $grown)->load());
+    }
+
+    public function testLoadReturnsNullWhenControllersListReordered(): void
+    {
+        $path = $this->dir . '/routes.php';
+        $this->cache($path)->store($this->sampleRoutes());
+
+        // Order matters: scan output order sets matching precedence, so a
+        // reordered list is a different cache, not the same one.
+        $this->assertNull($this->cache($path, array_reverse(self::CONTROLLERS))->load());
+    }
+
+    public function testLoadTreatsPreFingerprintArtifactAsStale(): void
+    {
+        // A cache file written by the old format (a bare routes list, no
+        // fingerprint wrapper) reads as a miss — stale, not broken.
+        $path = $this->dir . '/routes.php';
+        mkdir($this->dir, 0775, true);
+        file_put_contents(
+            $path,
+            '<?php' . PHP_EOL . 'return ' . var_export($this->sampleRoutes(), true) . ';' . PHP_EOL,
+        );
+
+        $this->assertNull($this->cache($path)->load());
     }
 
     public function testClearRemovesTheCacheAndReportsIt(): void
     {
         $path = $this->dir . '/routes.php';
-        $cache = new RouteCache($path);
+        $cache = $this->cache($path);
         $cache->store($this->sampleRoutes());
 
         $this->assertTrue($cache->clear());
@@ -108,12 +157,12 @@ final class RouteCacheTest extends TestCase
     {
         // Clearing an absent cache is success, not an error — it just had
         // nothing to remove.
-        $this->assertFalse((new RouteCache($this->dir . '/routes.php'))->clear());
+        $this->assertFalse($this->cache($this->dir . '/routes.php')->clear());
     }
 
     public function testStoreOverwritesAnExistingCache(): void
     {
-        $cache = new RouteCache($this->dir . '/routes.php');
+        $cache = $this->cache($this->dir . '/routes.php');
         $cache->store($this->sampleRoutes());
 
         $rebuilt = [[

@@ -82,6 +82,38 @@ the declared scalar type, a default/null, or — failing all of those — a
 supply. A placeholder value that doesn't fit its declared type is a non-match
 (→ 404), not a coercion.
 
+## Reading input
+
+`Input` (parsed body) and `Query` (query string) are typed readers built
+explicitly from the request in a controller — no injection, no magic:
+
+```php
+$input = Input::fromRequest($request);   // POST fields / parsed body
+$query = Query::fromRequest($request);   // ?page=2&archived=1
+
+$name     = $input->string('name');            // '' when absent
+$age      = $input->int('age', 0);             // default when absent or non-numeric
+$price    = $input->float('price');            // null when absent or non-numeric
+$page     = $query->int('page', 1);
+$archived = $query->bool('archived', false);   // explicit forms only (see below)
+$tags     = $input->array('tags');             // [] when absent
+```
+
+Both share their accessors via one base class (`FieldReader`), so the two
+surfaces are identical by construction; the base is an implementation detail —
+type-hint the sibling you mean. Accessors are falsy-safe: `"0"` is a present
+string and `0` a present int; only genuinely absent or wrong-shaped values fall
+back to the default. `string`/`int`/`float` never throw. The two shape-strict
+accessors fail loud with a 400 (`BadRequestException`) instead of guessing:
+`bool()` accepts only explicit forms (`true/false/1/0/yes/no/on/off`,
+case-insensitive, or a real boolean from a JSON body) and rejects anything
+else present; `array()` rejects a scalar where an array (`tags[]`) was
+expected rather than silently wrapping it.
+
+`Input` reads `getParsedBody()`, which PHP only populates out of the box for
+POST forms — JSON bodies and urlencoded PUT/PATCH need `ParseBodyMiddleware`
+in the stack.
+
 ## Errors
 
 Any layer signals failure by throwing an `HttpException` (which carries its own
