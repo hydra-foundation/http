@@ -16,6 +16,11 @@ use Psr\Http\Message\ServerRequestInterface;
  *
  * Accessors are falsy-safe: "0" is a present string and 0 is a present int;
  * only genuinely absent or wrong-shaped values fall back to the default.
+ *
+ * The parsed body this reads is only populated out of the box for POST forms
+ * (PHP's SAPI behavior). JSON bodies and urlencoded PUT/PATCH need
+ * {@see ParseBodyMiddleware} in the stack; multipart on non-POST methods is
+ * not parsed at all.
  */
 final class Input
 {
