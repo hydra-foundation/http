@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Hydra\Http\Tests\Unit;
 
+use Hydra\Http\Contracts\ErrorRendererInterface;
+use Hydra\Http\ErrorContext;
 use Hydra\Http\ErrorHandlerMiddleware;
 use Hydra\Http\Exceptions\HttpException;
 use Hydra\Http\Exceptions\MethodNotAllowedException;
 use Hydra\Http\Exceptions\NotFoundException;
+use Hydra\Http\PlainTextErrorRenderer;
 use Hydra\Http\Responder;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\TestCase;
@@ -40,6 +43,12 @@ final class ErrorHandlerMiddlewareTest extends TestCase
         return new Responder($psr17, $psr17);
     }
 
+    /** The default renderer, so these tests exercise the middleware end-to-end. */
+    private function renderer(): PlainTextErrorRenderer
+    {
+        return new PlainTextErrorRenderer($this->responder());
+    }
+
     private function request(): ServerRequestInterface
     {
         return $this->createStub(ServerRequestInterface::class);
@@ -59,14 +68,14 @@ final class ErrorHandlerMiddlewareTest extends TestCase
         $handler = $this->createStub(RequestHandlerInterface::class);
         $handler->method('handle')->willReturn($expected);
 
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $this->assertSame($expected, $middleware->process($this->request(), $handler));
     }
 
     public function testConvertsThrowableToA500(): void
     {
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process($this->request(), $this->handlerThrowing(new RuntimeException('boom')));
 
@@ -75,7 +84,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
 
     public function testProductionResponseHidesDetails(): void
     {
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process(
             $this->request(),
@@ -89,7 +98,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
 
     public function testDebugResponseIncludesExceptionDetails(): void
     {
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: true);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: true);
 
         $response = $middleware->process(
             $this->request(),
@@ -104,7 +113,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
     public function testCatchesErrorsNotOnlyExceptions(): void
     {
         // A TypeError is a Throwable but not an Exception — must still become 500.
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process($this->request(), $this->handlerThrowing(new TypeError('bad type')));
 
@@ -115,7 +124,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
     {
         $logger = new SpyLogger;
         $exception = new RuntimeException('boom');
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false, logger: $logger);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false, logger: $logger);
 
         $response = $middleware->process($this->request(), $this->handlerThrowing($exception));
 
@@ -134,7 +143,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
         $handler = $this->createStub(RequestHandlerInterface::class);
         $handler->method('handle')->willReturn($this->createStub(ResponseInterface::class));
 
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false, logger: $logger);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false, logger: $logger);
         $middleware->process($this->request(), $handler);
 
         $this->assertSame([], $logger->records);
@@ -142,7 +151,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
 
     public function testHttpExceptionUsesItsOwnStatus(): void
     {
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process($this->request(), $this->handlerThrowing(new NotFoundException));
 
@@ -155,7 +164,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
     {
         // An HttpException message is developer-authored and intentional
         // (e.g. abort(403, 'not yours')), so it reaches the client even in prod.
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process(
             $this->request(),
@@ -168,7 +177,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
 
     public function testHttpExceptionWithoutMessageFallsBackToReasonPhrase(): void
     {
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process(
             $this->request(),
@@ -183,7 +192,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
     {
         // A status the Status enum doesn't carry (and no message) hits the
         // `Status::reasonFor($status) ?? 'Error'` fallback rather than blanking.
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process(
             $this->request(),
@@ -196,7 +205,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
 
     public function testHttpExceptionHeadersAreApplied(): void
     {
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false);
 
         $response = $middleware->process(
             $this->request(),
@@ -210,7 +219,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
     public function testClientErrorIsNotLoggedAsAFault(): void
     {
         $logger = new SpyLogger;
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false, logger: $logger);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false, logger: $logger);
 
         $middleware->process($this->request(), $this->handlerThrowing(new NotFoundException));
 
@@ -221,7 +230,7 @@ final class ErrorHandlerMiddlewareTest extends TestCase
     {
         $logger = new SpyLogger;
         $exception = new HttpException(503, 'maintenance');
-        $middleware = new ErrorHandlerMiddleware($this->responder(), debug: false, logger: $logger);
+        $middleware = new ErrorHandlerMiddleware($this->renderer(), debug: false, logger: $logger);
 
         $response = $middleware->process($this->request(), $this->handlerThrowing($exception));
 
@@ -229,5 +238,75 @@ final class ErrorHandlerMiddlewareTest extends TestCase
         $this->assertCount(1, $logger->records);
         $this->assertSame(LogLevel::ERROR, $logger->records[0]['level']);
         $this->assertSame($exception, $logger->records[0]['context']['exception']);
+    }
+
+    public function testDelegatesToTheRendererWithTheResolvedContext(): void
+    {
+        // The middleware hands the renderer an ErrorContext carrying the caught
+        // throwable, the same request instance, the mapped status, and the debug
+        // flag — and returns whatever the renderer produced, untouched.
+        $expected = $this->responder()->text('rendered by the app', 499);
+        $request = $this->request();
+        $exception = new HttpException(403, 'nope');
+
+        $renderer = new class ($expected) implements ErrorRendererInterface {
+            public ?ErrorContext $seen = null;
+            public function __construct(private readonly ResponseInterface $response) {}
+            public function render(ErrorContext $context): ResponseInterface
+            {
+                $this->seen = $context;
+                return $this->response;
+            }
+        };
+
+        $middleware = new ErrorHandlerMiddleware($renderer, debug: true);
+        $response = $middleware->process($request, $this->handlerThrowing($exception));
+
+        $this->assertSame($expected, $response);
+        $this->assertNotNull($renderer->seen);
+        $this->assertSame($exception, $renderer->seen->error);
+        $this->assertSame($request, $renderer->seen->request);
+        $this->assertSame(403, $renderer->seen->status);
+        $this->assertTrue($renderer->seen->debug);
+    }
+
+    public function testMappedHeadersAreAppliedToTheRenderersResponse(): void
+    {
+        // Even a custom renderer's response gets the HttpException's headers.
+        $renderer = new class ($this->responder()) implements ErrorRendererInterface {
+            public function __construct(private readonly Responder $responder) {}
+            public function render(ErrorContext $context): ResponseInterface
+            {
+                return $this->responder->html('<p>method not allowed</p>', $context->status);
+            }
+        };
+
+        $middleware = new ErrorHandlerMiddleware($renderer, debug: false);
+        $response = $middleware->process(
+            $this->request(),
+            $this->handlerThrowing(new MethodNotAllowedException(['GET', 'POST']))
+        );
+
+        $this->assertSame(405, $response->getStatusCode());
+        $this->assertSame('GET, POST', $response->getHeaderLine('Allow'));
+    }
+
+    public function testAThrowingRendererIsNotSwallowed(): void
+    {
+        // A renderer that blows up (broken template, failed view dependency) must
+        // propagate to the kernel's last-resort boundary, not be caught here.
+        $renderer = new class implements ErrorRendererInterface {
+            public function render(ErrorContext $context): ResponseInterface
+            {
+                throw new RuntimeException('renderer exploded');
+            }
+        };
+
+        $middleware = new ErrorHandlerMiddleware($renderer, debug: false);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('renderer exploded');
+
+        $middleware->process($this->request(), $this->handlerThrowing(new RuntimeException('original')));
     }
 }

@@ -124,5 +124,17 @@ errors into responses: a mapped `HttpException` becomes its status; any other
 expected 4xx client errors are not. The logger defaults to a `NullLogger`, so
 logging is opt-in and the catch path needs no null checks.
 
+The middleware owns those invariants but delegates *presentation* to a pluggable
+`ErrorRendererInterface`, handed an `ErrorContext` (the throwable, the request,
+the resolved status, the debug flag). The kernel binds `PlainTextErrorRenderer`
+by default — plain text, matching the framework's long-time behaviour — so an
+app that wires nothing is unchanged. To render HTML, an htmx fragment, or JSON,
+an app binds its own renderer at the composition root; content negotiation
+(inspecting `Accept`, preferring htmx) is deliberately app policy, never
+auto-detected here. Use `ErrorContext::clientMessage()` for anything shown to a
+client so a non-`HttpException` message can't leak in production. A renderer that
+throws is not caught here — it bubbles to the kernel's last-resort boundary,
+which emits a bare dependency-free 500.
+
 This package ships no `ServiceProvider`; the application wires the kernel,
 pipeline, router, and PSR-7/-17 implementations at its composition root.
