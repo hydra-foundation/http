@@ -8,12 +8,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * An exception that maps to an HTTP status code.
- *
- * Throwing one of these is how any layer — the router, a controller, a
- * middleware — signals an error condition without building a response itself.
- * The outermost ErrorHandlerMiddleware is the single authority that turns these
- * into responses, so every error in the app gets a consistent shape.
+ * An exception that maps to an HTTP status code
  */
 class HttpException extends RuntimeException
 {

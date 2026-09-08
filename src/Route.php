@@ -5,14 +5,9 @@ declare(strict_types=1);
 namespace Hydra\Http;
 
 /**
- * A single registered route: an HTTP method, a path, and a handler target.
+ * Route
  *
- * The target is one of:
- *   - a Closure / callable:        fn($request) => $response
- *   - a [class-string, method]:    [UserController::class, 'show']
- *   - an invokable class-string:   HealthController::class
- *
- * The Router resolves class targets through the container before invoking.
+ * A single registered route: an HTTP method, a path, and a handler target
  */
 final class Route
 {

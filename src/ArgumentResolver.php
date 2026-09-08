@@ -14,20 +14,9 @@ use ReflectionNamedType;
 use ReflectionParameter;
 
 /**
+ * Argument resolver
+ *
  * Default resolver: reflects the target's signature and fills each parameter
- * by these rules, in order:
- *
- *   1. Type-hinted for the request  -> the request (any name, any position).
- *   2. Named after a {placeholder}  -> that route value, coerced to the
- *      declared scalar type (string/int/float/bool).
- *   3. Has a default / is nullable  -> the default, or null.
- *   4. Otherwise                    -> a LogicException: the signature asks for
- *      something routing can't supply, which is a wiring bug, not client input.
- *
- * A placeholder value that doesn't fit its declared type (e.g. "abc" for an
- * int) is treated as a non-match: the type is part of the route's contract, so
- * a bad value means the URL simply doesn't address a resource -> 404. The
- * message is left empty so nothing about the signature leaks to the client.
  */
 final class ArgumentResolver implements ArgumentResolverInterface
 {
@@ -40,7 +29,8 @@ final class ArgumentResolver implements ArgumentResolverInterface
             $type = $param->getType();
 
             // Rule 1: the request, matched by type so it can be named anything.
-            if ($type instanceof ReflectionNamedType
+            if (
+                $type instanceof ReflectionNamedType
                 && !$type->isBuiltin()
                 && $request instanceof ($type->getName())
             ) {
@@ -68,7 +58,7 @@ final class ArgumentResolver implements ArgumentResolverInterface
             // Rule 4: nothing can supply this parameter.
             throw new LogicException(sprintf(
                 'Cannot resolve parameter $%s for %s: it is neither the request, '
-                . 'a route parameter, nor optional.',
+                    . 'a route parameter, nor optional.',
                 $name,
                 $this->describe($reflection)
             ));

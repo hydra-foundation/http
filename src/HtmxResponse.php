@@ -7,18 +7,9 @@ namespace Hydra\Http;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * Fluent builder for the HX-* response headers that drive htmx from the server.
+ * HTMX Response
  *
- * Collect directives, then stamp them onto a PSR-7 response with applyTo():
- *
- *   return (new HtmxResponse)
- *       ->trigger('cartUpdated')
- *       ->pushUrl('/cart')
- *       ->applyTo($this->respond->html($body));
- *
- * The value over raw withHeader() is HX-Trigger encoding: htmx accepts a plain
- * (comma-separated) event list only while no event carries a detail; the moment
- * one does, the whole header must become a JSON object. This handles that.
+ * Fluent builder for the HX-* response headers that drive htmx from the server
  */
 final class HtmxResponse
 {

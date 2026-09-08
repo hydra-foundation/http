@@ -10,19 +10,13 @@ use ReflectionClass;
 use ReflectionMethod;
 
 /**
+ * Route scanner
+ *
  * Reflects over controller classes and turns their #[Route] attributes into a
  * plain, cacheable list of route definitions.
- *
- * The output is intentionally just arrays (no objects, no closures) so it can
- * be serialized to a compiled route cache later. Applying it to a Router is a
- * separate step via Router::loadRoutes().
  */
 final class RouteScanner
 {
-    /**
-     * @param  iterable<class-string> $controllers
-     * @return list<array{method: string, path: string, handler: array{0: class-string, 1: string}, middleware: list<class-string>}>
-     */
     public function scan(iterable $controllers): array
     {
         $routes = [];
@@ -56,10 +50,7 @@ final class RouteScanner
     }
 
     /**
-     * The optional class-level group declaration, or null when the controller
-     * isn't grouped.
-     *
-     * @param ReflectionClass<object> $reflection
+     * The optional class-level group declaration, or null when the controller isn't grouped.
      */
     private function group(ReflectionClass $reflection): ?RouteGroupAttribute
     {
@@ -88,9 +79,7 @@ final class RouteScanner
      * path untouched; otherwise the two are joined and canonicalized so the
      * emitted path matches what Router::normalize() would store ("/" . trimmed):
      * a leading slash is guaranteed regardless of how the prefix was written,
-     * and a group's root ("/") collapses to the bare prefix ("/admin"). Keeping
-     * the scanner's output canonical matters because that array is the route
-     * cache — anything reading it must not depend on the Router normalizing again.
+     * and a group's root ("/") collapses to the bare prefix ("/admin").
      */
     private function prefix(string $prefix, string $path): string
     {

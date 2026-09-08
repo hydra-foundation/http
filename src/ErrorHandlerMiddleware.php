@@ -15,27 +15,10 @@ use Psr\Log\NullLogger;
 use Throwable;
 
 /**
+ * Error handler middleware
+ *
  * Outermost middleware and the single authority that turns errors into
- * responses, so every failure in the app gets a consistent shape.
- *
- * An {@see HttpException} is an intentional, mapped error: it carries its own
- * status and headers (e.g. a 404, or a 405 with its Allow list). Any other
- * Throwable is an unexpected fault and becomes a 500, so a controller bug never
- * leaks a raw fatal to the client.
- *
- * This class owns the invariant parts of error handling — deciding the status,
- * logging faults, applying an HttpException's mapped headers — and delegates the
- * presentation to a pluggable {@see ErrorRendererInterface}. The default
- * renderer (bound by the kernel) emits plain text; an app binds its own to get
- * HTML/htmx/JSON. If the renderer itself throws, this middleware does NOT catch
- * it: it bubbles to {@see HttpKernel}'s last-resort boundary, which emits a bare
- * dependency-free 500 — exactly the case that boundary exists for.
- *
- * Faults (5xx, including every non-HttpException) are forwarded to a PSR-3
- * logger at error level with the exception under the conventional 'exception'
- * context key; expected client errors (4xx) are not logged as faults. The
- * logger defaults to a NullLogger, so logging is opt-in and the catch path
- * needs no null checks.
+ * responses, so every failure in the app gets a consistent shape
  */
 final class ErrorHandlerMiddleware implements MiddlewareInterface
 {
@@ -62,9 +45,7 @@ final class ErrorHandlerMiddleware implements MiddlewareInterface
 
     /**
      * Log the error if it is a fault (5xx), delegate rendering, then apply any
-     * headers the error mapped (e.g. Allow on a 405).
-     *
-     * @param array<string, string> $headers
+     * headers the error mapped (e.g. Allow on a 405)
      */
     private function render(Throwable $e, ServerRequestInterface $request, int $status, array $headers = []): ResponseInterface
     {

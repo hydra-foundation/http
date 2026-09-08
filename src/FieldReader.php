@@ -7,17 +7,9 @@ namespace Hydra\Http;
 use Hydra\Http\Exceptions\BadRequestException;
 
 /**
+ * Field reader
+ *
  * Shared typed accessors over one request value bag.
- *
- * {@see Input} (parsed body) and {@see Query} (query string) are thin
- * subclasses that differ only in which PSR-7 bag they read; every accessor
- * lives here so the two stay identical by construction. This class is an
- * implementation detail — type-hint the concrete sibling, not the base.
- *
- * Accessors are falsy-safe: "0" is a present string and 0 is a present int;
- * only genuinely absent or wrong-shaped values fall back to the default.
- * The exceptions are {@see bool()} and {@see array()}, where a present but
- * wrong-shaped value is a malformed request and fails loud as a 400.
  */
 abstract class FieldReader
 {
@@ -70,8 +62,6 @@ abstract class FieldReader
      * The field as a bool. Only explicit forms are accepted — true/1/yes/on
      * and false/0/no/off, case-insensitive (the true-forms match
      * `Environment::bool()`), plus real booleans from a parsed JSON body.
-     * A missing field yields the default; anything else present is a
-     * malformed request, not a false — it raises a 400 rather than guessing.
      */
     public function bool(string $key, ?bool $default = null): ?bool
     {
@@ -94,13 +84,8 @@ abstract class FieldReader
     }
 
     /**
-     * The field as an array (e.g. `tags[]`), or the default when absent.
-     * A scalar where an array was expected is a malformed request — it raises
-     * a 400 instead of being wrapped in a one-element array silently.
-     *
-     * @param array<array-key, mixed> $default
-     * @return array<array-key, mixed>
-     */
+     * The field as an array (e.g. `tags[]`), or the default when absent
+     * A scalar where an array was expected is a malformed request — it     */
     public function array(string $key, array $default = []): array
     {
         $value = $this->values[$key] ?? null;

@@ -7,10 +7,7 @@ namespace Hydra\Http\Exceptions;
 use Throwable;
 
 /**
- * The path matched a route but not for this HTTP method: HTTP 405.
- *
- * The methods that *are* allowed travel with the exception and become the
- * mandatory Allow response header (RFC 9110 §15.5.6).
+ * The path matched a route but not for this HTTP method: HTTP 405
  */
 final class MethodNotAllowedException extends HttpException
 {

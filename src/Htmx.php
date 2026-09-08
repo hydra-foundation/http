@@ -7,11 +7,9 @@ namespace Hydra\Http;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Typed reader for the HX-* request headers htmx sends.
+ * HTMX
  *
- * Built from the request in a controller — `Htmx::fromRequest($request)` — so a
- * handler can branch on htmx state without juggling stringly header names. An
- * absent header reads as null (not sent), kept distinct from an empty value.
+ * Typed reader for the HX-* request headers htmx sends
  */
 final class Htmx
 {

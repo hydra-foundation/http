@@ -8,13 +8,7 @@ use Hydra\Http\Contracts\ErrorRendererInterface;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * The default error renderer: plain text, matching what the framework has always
- * emitted. In debug mode it shows the class, message, origin, and stack trace;
- * otherwise it shows only the client-safe message ({@see ErrorContext::clientMessage()}).
- *
- * This is the renderer the kernel binds out of the box, so an app that wires
- * nothing gets exactly the previous behaviour. An app wanting HTML/htmx/JSON
- * binds its own {@see ErrorRendererInterface} instead.
+ * Plain text error
  */
 final class PlainTextErrorRenderer implements ErrorRendererInterface
 {

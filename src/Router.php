@@ -14,11 +14,10 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
+ * Router
+ *
  * The innermost handler of the pipeline: matches a request to a route, then
  * resolves and invokes its target.
- *
- * Registration is source-agnostic — the fluent methods here are the substrate
- * that both a routes file and the attribute scanner (Pass C) call into.
  */
 final class Router implements RequestHandlerInterface
 {
@@ -34,7 +33,6 @@ final class Router implements RequestHandlerInterface
         $this->arguments = $arguments ?? new ArgumentResolver;
     }
 
-    /** @param list<class-string> $middleware  PSR-15 middleware for this route, outermost first */
     public function add(string $method, string $path, mixed $target, array $middleware = []): self
     {
         $this->routes[] = new Route(strtoupper($method), $this->normalize($path), $target, $middleware);
@@ -45,8 +43,6 @@ final class Router implements RequestHandlerInterface
     /**
      * Bulk-register routes from a scanned/compiled definition list, e.g. the
      * output of RouteScanner::scan() (or a cached version of it).
-     *
-     * @param iterable<array{method: string, path: string, handler: mixed, middleware?: list<class-string>}> $routes
      */
     public function loadRoutes(iterable $routes): self
     {
@@ -57,31 +53,26 @@ final class Router implements RequestHandlerInterface
         return $this;
     }
 
-    /** @param list<class-string> $middleware */
     public function get(string $path, mixed $target, array $middleware = []): self
     {
         return $this->add('GET', $path, $target, $middleware);
     }
 
-    /** @param list<class-string> $middleware */
     public function post(string $path, mixed $target, array $middleware = []): self
     {
         return $this->add('POST', $path, $target, $middleware);
     }
 
-    /** @param list<class-string> $middleware */
     public function put(string $path, mixed $target, array $middleware = []): self
     {
         return $this->add('PUT', $path, $target, $middleware);
     }
 
-    /** @param list<class-string> $middleware */
     public function patch(string $path, mixed $target, array $middleware = []): self
     {
         return $this->add('PATCH', $path, $target, $middleware);
     }
 
-    /** @param list<class-string> $middleware */
     public function delete(string $path, mixed $target, array $middleware = []): self
     {
         return $this->add('DELETE', $path, $target, $middleware);
@@ -127,10 +118,7 @@ final class Router implements RequestHandlerInterface
     }
 
     /**
-     * Does a request method match a registered route's method? A HEAD request
-     * matches a GET route (RFC 9110 §9.3.2): the response is the GET response
-     * minus its body, which the SAPI/Emitter drops. An explicitly-registered
-     * HEAD route still wins for HEAD requests.
+     * Does a request method match a registered route's method?
      */
     private function methodMatches(string $routeMethod, string $requestMethod): bool
     {
@@ -141,11 +129,6 @@ final class Router implements RequestHandlerInterface
     /**
      * Resolve a matched route into the handler that will answer the request:
      * the target wrapped in its per-route middleware, if any.
-     *
-     * Both the target's class and its middleware are resolved through the
-     * container only now, on a match — routes that never match cost nothing.
-     *
-     * @param array<string, string> $params
      */
     private function toHandler(Route $route, array $params): RequestHandlerInterface
     {
@@ -167,11 +150,7 @@ final class Router implements RequestHandlerInterface
     }
 
     /**
-     * Resolve a route target into a request handler, using the container for
-     * classes. The matched params travel with it so the argument resolver can
-     * bind them to the target's typed parameters.
-     *
-     * @param array<string, string> $params
+     * Resolve a route target into a request handler, using the container for classes.
      */
     private function resolveTarget(mixed $target, array $params): RequestHandlerInterface
     {

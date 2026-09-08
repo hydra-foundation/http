@@ -7,6 +7,9 @@ namespace Hydra\Http;
 use Hydra\Http\Contracts\EmitterInterface;
 use Psr\Http\Message\ResponseInterface;
 
+/**
+ * Emitter
+ */
 final class Emitter implements EmitterInterface
 {
     public function emit(ResponseInterface $response): void

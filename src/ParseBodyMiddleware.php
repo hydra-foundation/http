@@ -11,29 +11,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Populates getParsedBody() for the request bodies PHP's SAPI doesn't: JSON
- * (any method) and urlencoded forms on PUT/PATCH/DELETE. Without this, PSR-7
- * implementations only carry a parsed body for POST forms — a JSON POST or a
- * urlencoded PUT silently reads as empty through {@see Input}, which is a
- * correctness footgun, not a feature.
+ * Parse body middleware
  *
- * Explicit mechanism, no magic: an app opts in by listing this class in its
- * middleware stack. Behavior:
- *
- *  - Never clobbers: a request that already has a parsed body (POST forms,
- *    POST multipart — populated upstream from PHP's globals) passes through
- *    untouched. GET/HEAD and empty bodies also pass through.
- *  - `application/json` and any `+json` suffix type: the decoded array becomes
- *    the parsed body. A JSON scalar or null is valid JSON but not a body map,
- *    so the parsed body stays null. Malformed JSON on a non-empty body throws
- *    {@see BadRequestException} (400) — a client asserting JSON but sending
- *    garbage is a client error; reading it as empty would hide bugs.
- *  - `application/x-www-form-urlencoded`: parsed with parse_str(). This is
- *    what makes form submissions over PUT/PATCH work. Note parse_str() is not
- *    capped by max_input_vars the way PHP's own POST parsing is; the request
- *    body size limit is what bounds it.
- *  - `multipart/form-data` on non-POST methods is NOT handled (PHP only
- *    parses multipart for POST; hand-parsing it is out of scope).
+ * JSON (any method) and urlencoded forms on PUT/PATCH/DELETE
  */
 final class ParseBodyMiddleware implements MiddlewareInterface
 {

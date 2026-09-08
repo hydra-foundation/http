@@ -5,17 +5,9 @@ declare(strict_types=1);
 namespace Hydra\Http;
 
 /**
- * HTTP status codes as a named, int-backed vocabulary.
+ * Status
  *
- * The point is not to forbid the literal `200` — HTTP codes are a standard
- * vocabulary, not magic numbers — but to give the less-memorable ones a name at
- * the call site and to be the single home for their reason phrases (which the
- * error handler previously kept as a private table of its own).
- *
- * Nothing is forced to use it: {@see Responder} and the base controller accept
- * `int|Status`, so you reach for a case where a name reads better and a literal
- * where it doesn't. Only the common subset this app emits is enumerated — this
- * is a vocabulary, not an exhaustive registry.
+ * HTTP status codes as a named, int-backed vocabulary
  */
 enum Status: int
 {
@@ -54,21 +46,13 @@ enum Status: int
     }
 
     /**
-     * The reason phrase for a raw status code, or null if it isn't one of the
-     * enumerated codes. Lets callers that hold a plain int (an HttpException's
-     * status, say) resolve a phrase without a table of their own.
+     * The reason phrase for a raw status code, or null if it isn't one of the enumerated codes.
      */
     public static function reasonFor(int $code): ?string
     {
         return self::tryFrom($code)?->reason();
     }
 
-    /**
-     * Normalize an `int|Status` to the plain int the PSR-7 layer speaks. The
-     * single home for the `instanceof` unwrap that every `int|Status`-accepting
-     * boundary (the {@see Responder}, the base controller's abort) would
-     * otherwise repeat.
-     */
     public static function toInt(int|self $status): int
     {
         return $status instanceof self ? $status->value : $status;

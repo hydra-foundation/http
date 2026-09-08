@@ -9,10 +9,9 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 
 /**
- * Builds common PSR-7 responses from the PSR-17 factories.
+ * Responder
  *
- * Usable on its own (inject it) or behind the base Controller. Depends only on
- * PSR-17 interfaces, so the concrete implementation stays an application choice.
+ * Builds common PSR-7 responses from the PSR-17 factories
  */
 final class Responder
 {

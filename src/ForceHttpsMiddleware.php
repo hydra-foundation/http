@@ -10,33 +10,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Forces every request onto HTTPS when the app opts in.
+ * Force HTTPS middleware
  *
- * Two jobs, both gated on the $enabled flag (the app passes its FORCE_HTTPS
- * config value when binding this) so local http dev is untouched by default:
- *
- *   - an insecure request is answered with a 301 to the same URL on https,
- *     before any session or routing work — no point starting a session on a
- *     request we're about to redirect;
- *   - a secure request proceeds, and its response carries an HSTS header so the
- *     browser upgrades subsequent requests itself, without the round trip.
- *
- * "Secure" honours X-Forwarded-Proto only when the app opts in via
- * $trustForwardedProto. Behind a TLS-terminating proxy (Traefik in our
- * dev/prod stacks) the request arrives here as plain http with the original
- * scheme in that header, so trusting it is what makes the check work — but
- * the header is client-supplied like any other: an attacker hitting the app
- * directly can send "X-Forwarded-Proto: https" and skip the redirect (and
- * collect an HSTS header over plain http). Trust must therefore be the app's
- * explicit declaration that a proxy it controls sets the header, never an
- * implicit default.
- *
- * It sits near the OUTERMOST of the stack (just inside the header/logging
- * decorators, outside the error handler): the upgrade should happen before the
- * app does any real work, and it must see the request before the router.
- *
- * The flags are plain bools rather than an app config object so the
- * middleware stays app-agnostic; the app binds them with its own config values.
+ * Forces every request onto HTTPS when the app opts in
  */
 final class ForceHttpsMiddleware implements MiddlewareInterface
 {

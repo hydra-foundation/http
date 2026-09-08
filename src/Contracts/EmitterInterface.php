@@ -6,6 +6,9 @@ namespace Hydra\Http\Contracts;
 
 use Psr\Http\Message\ResponseInterface;
 
+/**
+ * Emitter interface
+ */
 interface EmitterInterface
 {
     /**
