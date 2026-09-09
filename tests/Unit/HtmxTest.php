@@ -54,6 +54,27 @@ final class HtmxTest extends TestCase
         $this->assertSame('https://app.test/users', $htmx->currentUrl());
     }
 
+    public function testTargetIdIsParsedOutOfTheTagHashIdHeaderHtmxSends(): void
+    {
+        $htmx = Htmx::fromRequest($this->request(['HX-Target' => 'div#admin-body']));
+
+        $this->assertSame('div#admin-body', $htmx->target());
+        $this->assertSame('admin-body', $htmx->targetId());
+    }
+
+    public function testTargetIdIsNullWhenTheTargetElementHasNoId(): void
+    {
+        $this->assertNull(Htmx::fromRequest($this->request(['HX-Target' => 'main']))->targetId());
+        $this->assertNull(Htmx::fromRequest($this->request())->targetId());
+    }
+
+    public function testTargetIdIsDecoded(): void
+    {
+        $htmx = Htmx::fromRequest($this->request(['HX-Target' => 'div#user%20list']));
+
+        $this->assertSame('user list', $htmx->targetId());
+    }
+
     public function testAbsentHeadersReturnNullNotEmptyString(): void
     {
         $htmx = Htmx::fromRequest($this->request());

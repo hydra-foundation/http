@@ -32,10 +32,23 @@ final class Htmx
         return $this->request->getHeaderLine('HX-Boosted') === 'true';
     }
 
-    /** The id of the target element (HX-Target), or null if not sent. */
+    /**
+     * The HX-Target header verbatim. htmx sends the target element as
+     * "tag#id" (e.g. "div#admin-body"), or bare "tag" when it has no id —
+     * {@see targetId()} for the id alone.
+     */
     public function target(): ?string
     {
         return $this->header('HX-Target');
+    }
+
+    /** The id of the target element, or null when htmx sent no target or an id-less one. */
+    public function targetId(): ?string
+    {
+        $target = $this->header('HX-Target');
+        $hash = $target === null ? false : strpos($target, '#');
+
+        return $hash === false ? null : rawurldecode(substr((string) $target, $hash + 1));
     }
 
     /** The id of the element that triggered the request (HX-Trigger), or null. */
