@@ -1,0 +1,101 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Hydra\Http\Tests\Unit;
+
+use Hydra\Http\HtmxRedirectMiddleware;
+use Hydra\Http\Responder;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\RequestHandlerInterface;
+
+/**
+ * The one place that knows a redirect has to reach htmx differently.
+ *
+ * Handlers and the other middleware return a plain redirect; this converts it,
+ * so a redirect added later cannot forget to.
+ */
+final class HtmxRedirectMiddlewareTest extends TestCase
+{
+    public function test_htmx_redirect_becomes_a_no_content_with_the_header(): void
+    {
+        $response = $this->process($this->htmxRequest(), $this->redirect(302, '/dashboard'));
+
+        $this->assertSame(204, $response->getStatusCode());
+        $this->assertSame('/dashboard', $response->getHeaderLine('HX-Redirect'));
+        $this->assertFalse($response->hasHeader('Location'));
+    }
+
+    public function test_a_browser_redirect_is_left_alone(): void
+    {
+        $response = $this->process($this->request(), $this->redirect(302, '/dashboard'));
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame('/dashboard', $response->getHeaderLine('Location'));
+        $this->assertFalse($response->hasHeader('HX-Redirect'));
+    }
+
+    public function test_a_see_other_is_converted_too(): void
+    {
+        $response = $this->process($this->htmxRequest(), $this->redirect(303, '/admin'));
+
+        $this->assertSame(204, $response->getStatusCode());
+        $this->assertSame('/admin', $response->getHeaderLine('HX-Redirect'));
+    }
+
+    public function test_a_normal_htmx_response_passes_through(): void
+    {
+        // The common case: a 200 fragment must not be mistaken for a redirect.
+        $response = $this->process($this->htmxRequest(), (new Psr17Factory)->createResponse(200));
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertFalse($response->hasHeader('HX-Redirect'));
+    }
+
+    public function test_a_not_modified_is_left_alone(): void
+    {
+        // 304 is 3xx but carries no Location — converting it would invent one.
+        $response = $this->process($this->htmxRequest(), (new Psr17Factory)->createResponse(304));
+
+        $this->assertSame(304, $response->getStatusCode());
+        $this->assertFalse($response->hasHeader('HX-Redirect'));
+    }
+
+    private function process(ServerRequestInterface $request, ResponseInterface $from): ResponseInterface
+    {
+        $factory = new Psr17Factory;
+
+        return (new HtmxRedirectMiddleware(new Responder($factory, $factory)))
+            ->process($request, $this->handler($from));
+    }
+
+    private function redirect(int $status, string $to): ResponseInterface
+    {
+        return (new Psr17Factory)->createResponse($status)->withHeader('Location', $to);
+    }
+
+    private function request(): ServerRequestInterface
+    {
+        return (new Psr17Factory)->createServerRequest('POST', '/login');
+    }
+
+    private function htmxRequest(): ServerRequestInterface
+    {
+        return $this->request()->withHeader('HX-Request', 'true');
+    }
+
+    private function handler(ResponseInterface $response): RequestHandlerInterface
+    {
+        return new class ($response) implements RequestHandlerInterface {
+            public function __construct(private readonly ResponseInterface $response) {}
+
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                return $this->response;
+            }
+        };
+    }
+}
