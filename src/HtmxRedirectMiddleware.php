@@ -12,10 +12,12 @@ use Psr\Http\Server\RequestHandlerInterface;
 /**
  * Rewrites a redirect into the form htmx acts on.
  *
- * htmx issues an XHR, so the browser follows a 3xx itself and htmx swaps the
- * redirect target's body into the page instead of navigating. A 204 carrying
- * HX-Redirect is what makes it navigate. Normalising here rather than at each
- * call site means a handler returns a plain redirect and cannot forget.
+ * htmx fetches, so the browser follows a 3xx itself and htmx swaps the redirect
+ * target's whole body into one element instead of navigating. htmx 4 reads no
+ * response header to say otherwise and skips a 204 entirely, so what makes it
+ * navigate is a directive in a body it will look at. Normalising here rather
+ * than at each call site means a handler returns a plain redirect and cannot
+ * forget.
  */
 final class HtmxRedirectMiddleware implements MiddlewareInterface
 {
@@ -36,8 +38,8 @@ final class HtmxRedirectMiddleware implements MiddlewareInterface
             return $response;
         }
 
-        return (new HtmxResponse)
+        return $this->respond->htmx()
             ->redirect($response->getHeaderLine('Location'))
-            ->applyTo($this->respond->noContent());
+            ->applyTo($this->respond->html(''));
     }
 }

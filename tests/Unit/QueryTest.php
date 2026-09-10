@@ -112,6 +112,22 @@ final class QueryTest extends TestCase
         $this->assertFalse($query->has('missing'));
     }
 
+    public function testReadsTheQueryStringOfAnotherUrl(): void
+    {
+        $query = Query::fromUrl('https://example.test/admin/users?q=ada&page=3');
+
+        $this->assertSame('ada', $query->string('q'));
+        $this->assertSame(3, $query->int('page'));
+    }
+
+    public function testAUrlWithNoQueryStringReadsAsEmpty(): void
+    {
+        $query = Query::fromUrl('https://example.test/admin/users');
+
+        $this->assertFalse($query->has('page'));
+        $this->assertSame('', $query->string('q'));
+    }
+
     public function testReadsQueryParamsNotParsedBody(): void
     {
         // The sibling boundary: Query never sees the body, Input never sees

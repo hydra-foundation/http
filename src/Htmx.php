@@ -9,7 +9,11 @@ use Psr\Http\Message\ServerRequestInterface;
 /**
  * HTMX
  *
- * Typed reader for the HX-* request headers htmx sends
+ * Typed reader for the HX-* request headers htmx sends.
+ *
+ * Only for headers htmx actually sends: HX-Trigger, HX-Trigger-Name and
+ * HX-Prompt were dropped in htmx 4, and a reader for them would answer null
+ * forever rather than say why.
  */
 final class Htmx
 {
@@ -49,24 +53,6 @@ final class Htmx
         $hash = $target === null ? false : strpos($target, '#');
 
         return $hash === false ? null : rawurldecode(substr((string) $target, $hash + 1));
-    }
-
-    /** The id of the element that triggered the request (HX-Trigger), or null. */
-    public function trigger(): ?string
-    {
-        return $this->header('HX-Trigger');
-    }
-
-    /** The name of the triggering element (HX-Trigger-Name), or null. */
-    public function triggerName(): ?string
-    {
-        return $this->header('HX-Trigger-Name');
-    }
-
-    /** The user's response to an hx-prompt (HX-Prompt), or null. */
-    public function prompt(): ?string
-    {
-        return $this->header('HX-Prompt');
     }
 
     /** The browser's current URL at request time (HX-Current-URL), or null. */

@@ -5,108 +5,112 @@ declare(strict_types=1);
 namespace Hydra\Http\Tests\Unit;
 
 use Hydra\Http\HtmxResponse;
+use Hydra\Http\Responder;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 
+/**
+ * Directives reach an htmx 4 client in the body or not at all, so every
+ * assertion here is about markup. A test that checked a header would pass
+ * against a client that stopped reading headers two major versions ago.
+ */
 final class HtmxResponseTest extends TestCase
 {
-    private function response(): ResponseInterface
+    public function testAMarkerCarriesTheDirectiveAndNothingIsLeftInTheHeaders(): void
     {
-        return (new Psr17Factory)->createResponse();
+        $response = $this->responder()->htmx()
+            ->redirect('/login')
+            ->applyTo($this->html(''));
+
+        $this->assertSame('<div data-hydra-redirect="/login" hidden></div>', $this->body($response));
+        $this->assertSame([], array_filter(
+            array_keys($response->getHeaders()),
+            static fn (string $name): bool => str_starts_with(strtolower($name), 'hx-'),
+        ));
     }
 
-    public function testSetsSimpleDirectiveHeaders(): void
+    public function testTheMarkerIsAppendedToContentRatherThanReplacingIt(): void
     {
-        $response = (new HtmxResponse)
-            ->redirect('/login')
+        $response = $this->responder()->htmx()
+            ->pushUrl('/users')
+            ->applyTo($this->html('<table id="rows"></table>'));
+
+        $this->assertSame(
+            '<table id="rows"></table><div data-hydra-push-url="/users" hidden></div>',
+            $this->body($response),
+        );
+    }
+
+    public function testSeveralDirectivesShareOneMarker(): void
+    {
+        $response = $this->responder()->htmx()
             ->pushUrl('/users')
             ->replaceUrl('/x')
-            ->retarget('#list')
-            ->reswap('outerHTML')
-            ->reselect('#row')
-            ->location('/spa')
-            ->applyTo($this->response());
+            ->applyTo($this->html(''));
 
-        $this->assertSame('/login', $response->getHeaderLine('HX-Redirect'));
-        $this->assertSame('/users', $response->getHeaderLine('HX-Push-Url'));
-        $this->assertSame('/x', $response->getHeaderLine('HX-Replace-Url'));
-        $this->assertSame('#list', $response->getHeaderLine('HX-Retarget'));
-        $this->assertSame('outerHTML', $response->getHeaderLine('HX-Reswap'));
-        $this->assertSame('#row', $response->getHeaderLine('HX-Reselect'));
-        $this->assertSame('/spa', $response->getHeaderLine('HX-Location'));
-    }
-
-    public function testRefreshSetsTrue(): void
-    {
-        $response = (new HtmxResponse)->refresh()->applyTo($this->response());
-
-        $this->assertSame('true', $response->getHeaderLine('HX-Refresh'));
-    }
-
-    public function testLeavesResponseUntouchedWhenNothingSet(): void
-    {
-        $response = (new HtmxResponse)->applyTo($this->response());
-
-        $this->assertFalse($response->hasHeader('HX-Trigger'));
-        $this->assertFalse($response->hasHeader('HX-Redirect'));
-    }
-
-    public function testSingleEventTriggerUsesPlainName(): void
-    {
-        $response = (new HtmxResponse)->trigger('cartUpdated')->applyTo($this->response());
-
-        $this->assertSame('cartUpdated', $response->getHeaderLine('HX-Trigger'));
-    }
-
-    public function testMultipleDetaillessTriggersAreCommaSeparated(): void
-    {
-        $response = (new HtmxResponse)
-            ->trigger('a')
-            ->trigger('b')
-            ->applyTo($this->response());
-
-        $this->assertSame('a, b', $response->getHeaderLine('HX-Trigger'));
-    }
-
-    public function testTriggerWithDetailEncodesAsJson(): void
-    {
-        $response = (new HtmxResponse)
-            ->trigger('showMessage', ['level' => 'info', 'text' => 'Saved'])
-            ->applyTo($this->response());
-
-        $decoded = json_decode($response->getHeaderLine('HX-Trigger'), true);
-        $this->assertSame(['showMessage' => ['level' => 'info', 'text' => 'Saved']], $decoded);
-    }
-
-    public function testMixedTriggersAllEncodeAsJson(): void
-    {
-        // Once any event carries a detail, every event must move to the JSON form.
-        $response = (new HtmxResponse)
-            ->trigger('plain')
-            ->trigger('rich', ['n' => 1])
-            ->applyTo($this->response());
-
-        $decoded = json_decode($response->getHeaderLine('HX-Trigger'), true);
-        $this->assertSame(['plain' => null, 'rich' => ['n' => 1]], $decoded);
-    }
-
-    public function testTriggerDetailKeepsSlashesAndUnicodeUnescaped(): void
-    {
-        // JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE keep the header compact
-        // and readable; lock that choice in.
-        $response = (new HtmxResponse)
-            ->trigger('navigate', ['url' => '/users/1', 'label' => 'café'])
-            ->applyTo($this->response());
-
-        $header = $response->getHeaderLine('HX-Trigger');
-
-        // Slashes and unicode both stay literal — no \/ and no \uXXXX escaping.
-        $this->assertSame('{"navigate":{"url":"/users/1","label":"café"}}', $header);
-        // ... and it still round-trips back to the original detail.
         $this->assertSame(
-            ['navigate' => ['url' => '/users/1', 'label' => 'café']],
-            json_decode($header, true),
+            '<div data-hydra-push-url="/users" data-hydra-replace-url="/x" hidden></div>',
+            $this->body($response),
         );
+    }
+
+    public function testAListUrlSurvivesTheAttribute(): void
+    {
+        $response = $this->responder()->htmx()
+            ->pushUrl('/admin/users?q=a&sort=id&dir=asc')
+            ->applyTo($this->html(''));
+
+        // Unescaped, the & would end the attribute at the first entity and the
+        // pushed URL would lose its criteria.
+        $this->assertStringContainsString('"/admin/users?q=a&amp;sort=id&amp;dir=asc"', $this->body($response));
+        $this->assertSame('/admin/users?q=a&sort=id&dir=asc', HtmxResponse::directive($response, 'push-url'));
+    }
+
+    public function testRetargetWrapsTheBodyOutOfBand(): void
+    {
+        $response = $this->responder()->htmx()
+            ->retarget('#app-error', 'innerHTML')
+            ->applyTo($this->html('<p>Nope</p>'));
+
+        // htmx drops an out-of-band element from the fragment after applying it,
+        // so a body that is only this leaves the requesting element alone.
+        $this->assertSame(
+            '<div hx-swap-oob="innerHTML:#app-error"><p>Nope</p></div>',
+            $this->body($response),
+        );
+    }
+
+    public function testRetargetDefaultsToReplacingTheRegion(): void
+    {
+        $response = $this->responder()->htmx()
+            ->retarget('#app-error')
+            ->applyTo($this->html('<p>Nope</p>'));
+
+        $this->assertStringContainsString('hx-swap-oob="outerHTML:#app-error"', $this->body($response));
+    }
+
+    public function testNothingAskedForChangesNothing(): void
+    {
+        $response = $this->responder()->htmx()->applyTo($this->html('<p>Fine</p>'));
+
+        $this->assertSame('<p>Fine</p>', $this->body($response));
+    }
+
+    private function body(ResponseInterface $response): string
+    {
+        return (string) $response->getBody();
+    }
+
+    private function html(string $body): ResponseInterface
+    {
+        return $this->responder()->html($body);
+    }
+
+    private function responder(): Responder
+    {
+        $factory = new Psr17Factory;
+
+        return new Responder($factory, $factory);
     }
 }

@@ -5,115 +5,131 @@ declare(strict_types=1);
 namespace Hydra\Http;
 
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 /**
  * HTMX Response
  *
- * Fluent builder for the HX-* response headers that drive htmx from the server
+ * The things a server used to say in HX-* response headers, said in the only
+ * channel htmx 4 still listens to: the body it swaps. The 4.x client reads no
+ * response header at all — every capitalised HX-* token in the bundle is one it
+ * sends — so a directive has to be markup.
+ *
+ * Two kinds, because htmx understands one of them itself:
+ *
+ * - retarget() wraps the body in an out-of-band element. htmx applies it to the
+ *   selector given, then drops it from the fragment, so a body that is only
+ *   this leaves the element that made the request untouched.
+ * - the rest are hidden markers the page's script acts on, before or after the
+ *   swap. See applyTo() in public/js/app.js.
+ *
+ * Build one through {@see Responder::htmx()}, which has the stream factory.
  */
 final class HtmxResponse
 {
-    /** @var array<string, string> Single-value directive headers. */
-    private array $headers = [];
+    /** @var array<string, string> marker attribute => value. */
+    private array $markers = [];
 
-    /** @var array<string, mixed> event name => detail (null = no detail). */
-    private array $triggers = [];
+    private ?string $target = null;
+
+    private string $swap = 'outerHTML';
+
+    public function __construct(private readonly StreamFactoryInterface $streams) {}
 
     /**
-     * Full client-side redirect (browser navigates, no swap). Mutually
-     * exclusive with location() — htmx honours only one, so set just one.
+     * Navigate the browser rather than swapping the response in. Read before
+     * the swap, so the element that made the request is left as it was while
+     * the page changes underneath it.
      */
     public function redirect(string $url): self
     {
-        return $this->set('HX-Redirect', $url);
+        return $this->mark('redirect', $url);
     }
 
-    /**
-     * Client-side navigation done as an ajax swap rather than a full load.
-     * Mutually exclusive with redirect() — set one or the other, not both.
-     */
-    public function location(string $url): self
-    {
-        return $this->set('HX-Location', $url);
-    }
-
-    /** Push a new URL into browser history. */
+    /** Push a URL into browser history once the swap has landed. */
     public function pushUrl(string $url): self
     {
-        return $this->set('HX-Push-Url', $url);
+        return $this->mark('push-url', $url);
     }
 
-    /** Replace the current URL in browser history. */
+    /** Replace the current URL in browser history once the swap has landed. */
     public function replaceUrl(string $url): self
     {
-        return $this->set('HX-Replace-Url', $url);
-    }
-
-    /** Tell the client to do a full page refresh. */
-    public function refresh(): self
-    {
-        return $this->set('HX-Refresh', 'true');
-    }
-
-    /** Swap the response into a different element than the triggering one. */
-    public function retarget(string $selector): self
-    {
-        return $this->set('HX-Retarget', $selector);
-    }
-
-    /** Override how the response is swapped in (e.g. "outerHTML", "beforeend"). */
-    public function reswap(string $spec): self
-    {
-        return $this->set('HX-Reswap', $spec);
-    }
-
-    /** Choose which part of the response is swapped in. */
-    public function reselect(string $selector): self
-    {
-        return $this->set('HX-Reselect', $selector);
+        return $this->mark('replace-url', $url);
     }
 
     /**
-     * Trigger a client-side event. Call repeatedly to trigger several; pass a
-     * $detail to send data with the event (forces the JSON encoding).
+     * Swap this body into a fixed region instead of the element that asked for
+     * it — an error belongs somewhere the reader can see without losing what
+     * they were doing. Target and swap style are one attribute value to htmx,
+     * so they are one call here; there is no way to say the second alone.
      */
-    public function trigger(string $event, mixed $detail = null): self
+    public function retarget(string $selector, string $swap = 'outerHTML'): self
     {
-        $this->triggers[$event] = $detail;
+        $this->target = $selector;
+        $this->swap = $swap;
 
         return $this;
     }
 
     public function applyTo(ResponseInterface $response): ResponseInterface
     {
-        foreach ($this->headers as $name => $value) {
-            $response = $response->withHeader($name, $value);
+        $body = (string) $response->getBody();
+
+        if ($this->target !== null) {
+            $body = '<div hx-swap-oob="' . $this->e($this->swap . ':' . $this->target) . '">'
+                . $body
+                . '</div>';
         }
 
-        if ($this->triggers !== []) {
-            $response = $response->withHeader('HX-Trigger', $this->encodeTriggers());
-        }
-
-        return $response;
+        return $response->withBody($this->streams->createStream($body . $this->markup()));
     }
 
-    private function set(string $name, string $value): self
+    /**
+     * What directive of this name a response carries, or null. The inverse of
+     * the builder: without it a caller checking what was asked for — a test,
+     * mostly — has to know how a marker is spelled, and three of them knowing
+     * is how the last protocol change went unnoticed.
+     *
+     * Read with a pattern rather than a parser because the attribute is written
+     * directly above, in a shape no caller supplies.
+     */
+    public static function directive(ResponseInterface $response, string $name): ?string
     {
-        $this->headers[$name] = $value;
+        $pattern = '~\sdata-hydra-' . preg_quote($name, '~') . '="([^"]*)"~';
+
+        if (preg_match($pattern, (string) $response->getBody(), $matches) !== 1) {
+            return null;
+        }
+
+        return htmlspecialchars_decode($matches[1], ENT_QUOTES);
+    }
+
+    private function mark(string $name, string $value): self
+    {
+        $this->markers['data-hydra-' . $name] = $value;
 
         return $this;
     }
 
-    private function encodeTriggers(): string
+    private function markup(): string
     {
-        // Plain comma list while every event is detail-less; JSON once any
-        // event carries data — htmx can't read a mixed plain/JSON header.
-        $hasDetail = array_filter($this->triggers, static fn ($detail) => $detail !== null) !== [];
-
-        if (!$hasDetail) {
-            return implode(', ', array_keys($this->triggers));
+        if ($this->markers === []) {
+            return '';
         }
 
-        return json_encode($this->triggers, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $attributes = '';
+
+        foreach ($this->markers as $name => $value) {
+            $attributes .= ' ' . $name . '="' . $this->e($value) . '"';
+        }
+
+        return '<div' . $attributes . ' hidden></div>';
+    }
+
+    /** A list URL carries a query string, so & has to survive the attribute. */
+    private function e(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }

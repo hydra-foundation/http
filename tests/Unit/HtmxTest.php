@@ -37,20 +37,14 @@ final class HtmxTest extends TestCase
         $this->assertFalse(Htmx::fromRequest($this->request())->isBoosted());
     }
 
-    public function testReadsTargetTriggerAndPrompt(): void
+    public function testReadsTheTargetAndTheBrowsersCurrentUrl(): void
     {
         $htmx = Htmx::fromRequest($this->request([
             'HX-Target' => 'main',
-            'HX-Trigger' => 'save-btn',
-            'HX-Trigger-Name' => 'save',
-            'HX-Prompt' => 'delete',
             'HX-Current-URL' => 'https://app.test/users',
         ]));
 
         $this->assertSame('main', $htmx->target());
-        $this->assertSame('save-btn', $htmx->trigger());
-        $this->assertSame('save', $htmx->triggerName());
-        $this->assertSame('delete', $htmx->prompt());
         $this->assertSame('https://app.test/users', $htmx->currentUrl());
     }
 
@@ -81,9 +75,7 @@ final class HtmxTest extends TestCase
 
         // null is "not sent" — distinct from an empty value a client could send.
         $this->assertNull($htmx->target());
-        $this->assertNull($htmx->trigger());
-        $this->assertNull($htmx->triggerName());
-        $this->assertNull($htmx->prompt());
+        $this->assertNull($htmx->targetId());
         $this->assertNull($htmx->currentUrl());
     }
 }

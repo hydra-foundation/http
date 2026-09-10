@@ -50,6 +50,15 @@ final class Responder
         return $this->responses->createResponse(Status::toInt($status))->withHeader('Location', $location);
     }
 
+    /**
+     * Directives for an htmx client. They are written into the body rather than
+     * the headers, which is why they need the stream factory this holds.
+     */
+    public function htmx(): HtmxResponse
+    {
+        return new HtmxResponse($this->streams);
+    }
+
     private function make(string $body, int|Status $status, string $contentType): ResponseInterface
     {
         return $this->responses->createResponse(Status::toInt($status))
